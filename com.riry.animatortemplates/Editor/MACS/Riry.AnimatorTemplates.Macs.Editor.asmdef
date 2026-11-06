@@ -12,8 +12,7 @@
     "autoReferenced": false,
     "defineConstraints": [
         "RIRY_MACS",
-        "RIRY_HARMONY",
-        "RIRY_MACS_WINDOW_DONE"
+        "RIRY_HARMONY"
     ],
     "versionDefines": [
         {

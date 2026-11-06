@@ -25,14 +25,15 @@ namespace Riry.AnimatorTemplates.Editor.Macs
         /// <summary>The weight parameter MACS gives a child it adds to a Direct blend tree.</summary>
         internal static string DefaultDirectWeight() => EditorPrefs.GetString(DirectWeightPref, "Always 1");
 
-        /// <summary>Every parameter the template's blend trees read, in the order first met.</summary>
+        /// <summary>
+        /// Every parameter the template uses, in the order first met: those its blend trees read, and those its AAP clips
+        /// animate.
+        /// </summary>
         internal static List<string> UsedParameters(BlendTree template)
         {
             var names = new List<string>();
-            var seen = new HashSet<BlendTree>();
-            void Walk(BlendTree tree)
+            foreach (BlendTree tree in Trees(template))
             {
-                if (tree == null || !seen.Add(tree)) return;
                 if (tree.blendType == BlendTreeType.Direct)
                 {
                     foreach (ChildMotion child in tree.children) Add(names, child.directBlendParameter);
@@ -42,10 +43,101 @@ namespace Riry.AnimatorTemplates.Editor.Macs
                     Add(names, tree.blendParameter);
                     if (tree.blendType != BlendTreeType.Simple1D) Add(names, tree.blendParameterY);
                 }
+                foreach (ChildMotion child in tree.children)
+                {
+                    if (child.motion is AnimationClip clip && IsAap(clip, out string parameter, out _)) Add(names, parameter);
+                }
+            }
+            return names;
+        }
+
+        /// <summary>The template and every blend tree under it, each once.</summary>
+        internal static List<BlendTree> Trees(BlendTree template)
+        {
+            var trees = new List<BlendTree>();
+            void Walk(BlendTree tree)
+            {
+                if (tree == null || trees.Contains(tree)) return;
+                trees.Add(tree);
                 foreach (ChildMotion child in tree.children) Walk(child.motion as BlendTree);
             }
             Walk(template);
-            return names;
+            return trees;
+        }
+
+        /// <summary>The template's clips, each once.</summary>
+        internal static List<AnimationClip> Clips(BlendTree template)
+        {
+            var clips = new List<AnimationClip>();
+            foreach (BlendTree tree in Trees(template))
+            {
+                foreach (ChildMotion child in tree.children)
+                {
+                    if (child.motion is AnimationClip clip && !clips.Contains(clip)) clips.Add(clip);
+                }
+            }
+            return clips;
+        }
+
+        /// <summary>
+        /// An AAP clip as MACS makes one: a single curve, on the Animator property named after a parameter, holding one
+        /// value.
+        /// </summary>
+        internal static bool IsAap(AnimationClip clip, out string parameter, out float value)
+        {
+            parameter = null;
+            value = 0;
+            EditorCurveBinding[] bindings = AnimationUtility.GetCurveBindings(clip);
+            if (bindings.Length != 1 || AnimationUtility.GetObjectReferenceCurveBindings(clip).Length != 0) return false;
+            if (bindings[0].path != "" || bindings[0].type != typeof(Animator)) return false;
+            AnimationCurve curve = AnimationUtility.GetEditorCurve(clip, bindings[0]);
+            if (curve == null || curve.length == 0) return false;
+            value = curve.keys[0].value;
+            foreach (Keyframe key in curve.keys)
+            {
+                if (key.value != value) return false;
+            }
+            parameter = bindings[0].propertyName;
+            return true;
+        }
+
+        /// <summary>
+        /// Clips that animate a renamed parameter but are not single AAP clips, so they cannot be made again for the new
+        /// name: they are kept as they are.
+        /// </summary>
+        internal static List<AnimationClip> NotRenamable(BlendTree template, IDictionary<string, string> names)
+        {
+            var found = new List<AnimationClip>();
+            foreach (AnimationClip clip in Clips(template))
+            {
+                if (IsAap(clip, out _, out _)) continue;
+                foreach (EditorCurveBinding binding in AnimationUtility.GetCurveBindings(clip))
+                {
+                    if (binding.path == "" && binding.type == typeof(Animator) && names.TryGetValue(binding.propertyName, out string renamed) &&
+                        !string.IsNullOrEmpty(renamed) && renamed != binding.propertyName)
+                    {
+                        found.Add(clip);
+                        break;
+                    }
+                }
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// Every AAP clip of the template, made again with MACS's generator for its parameter's chosen name (an existing
+        /// clip of that name and value is reused). Run outside the undo step, so Ctrl+Z leaves the clips.
+        /// </summary>
+        internal static Dictionary<Motion, Motion> MakeAapClips(BlendTree template, AnimatorController controller, IDictionary<string, string> names)
+        {
+            var made = new Dictionary<Motion, Motion>();
+            foreach (AnimationClip clip in Clips(template))
+            {
+                if (!IsAap(clip, out string parameter, out float value)) continue;
+                AnimationClip aap = MacsFunctions.AapClip(controller, Rename(names, parameter), value);
+                if (aap != null) made[clip] = aap;
+            }
+            return made;
         }
 
         private static void Add(List<string> names, string name)
@@ -65,7 +157,7 @@ namespace Riry.AnimatorTemplates.Editor.Macs
         /// was changed (cancelled, or the request is no longer valid).
         /// </summary>
         internal static bool Run(MacsTemplateRequest request, IDictionary<string, string> names, string weight,
-            IDictionary<Motion, Motion> replacements)
+            Func<IDictionary<Motion, Motion>> makeReplacements)
         {
             if (request.Template == null || request.Target == null || request.Controller == null)
             {
@@ -85,6 +177,12 @@ namespace Riry.AnimatorTemplates.Editor.Macs
                 if (choice == 1) return false;
                 addMissing = choice == 0;
             }
+            List<AnimationClip> kept = NotRenamable(request.Template, names);
+            if (kept.Count > 0)
+                Debug.LogWarning(MacsTemplateMenu.LogPrefix + "These clips of " + request.Template.name + " animate a renamed parameter but are " +
+                    "not single AAP clips, so they are used unchanged: " + string.Join(", ", kept.Select(c => c.name)), request.Template);
+            // Before the undo group: the clips are files the user keeps, whatever Ctrl+Z does.
+            IDictionary<Motion, Motion> replacements = makeReplacements != null ? makeReplacements() : null;
             Insert(request, names, direct ? weight : null, replacements, addMissing ? missing : new List<string>());
             return true;
         }
@@ -102,7 +200,17 @@ namespace Riry.AnimatorTemplates.Editor.Macs
                 if (addParameters.Count > 0)
                 {
                     Undo.RegisterCompleteObjectUndo(request.Controller, label);
-                    foreach (string name in addParameters) request.Controller.AddParameter(name, AnimatorControllerParameterType.Float);
+                    foreach (string name in addParameters)
+                    {
+                        // The new child's weight starts at 1, as MACS gives its Direct blend tree weight parameter;
+                        // at 0 the inserted template would have no effect.
+                        request.Controller.AddParameter(new AnimatorControllerParameter
+                        {
+                            name = name,
+                            type = AnimatorControllerParameterType.Float,
+                            defaultFloat = name == weight ? 1f : 0f,
+                        });
+                    }
                     EditorUtility.SetDirty(request.Controller);
                 }
 
@@ -230,11 +338,17 @@ namespace Riry.AnimatorTemplates.Editor.Macs
 // ============================================================================
 //
 // MacsTemplateInsert (this file)
-//   UsedParameters(template) Every parameter the template's blend trees read: blendParameter (1D and 2D),
-//                            blendParameterY (2D), each child's directBlendParameter (Direct).
+//   UsedParameters(template) Every parameter the template uses: blendParameter (1D and 2D), blendParameterY (2D), each
+//                            child's directBlendParameter (Direct), and the parameter each AAP clip animates.
+//   Trees / Clips            The template's blend trees and clips, each once.
+//   IsAap                    A clip with one constant curve on an Animator property (path ""): MACS's AAP clip shape.
+//   NotRenamable             Other clips animating a renamed parameter: kept unchanged, with a warning in Run.
+//   MakeAapClips             Each AAP clip made again for the chosen name with MacsFunctions.AapClip (reused when one
+//                            exists); called before the undo group, so Ctrl+Z never deletes them.
 //   Missing(controller, ...) Names the controller has no parameter for.
-//   Run                      Asks (Add and insert / Cancel / Insert without adding) when parameters are missing, then
-//                            Insert. weight: the new child's directBlendParameter when the clicked tree is Direct.
+//   Run                      Asks (Add and insert / Cancel / Insert without adding) when parameters are missing, makes the
+//                            AAP clips (makeReplacements), then Insert. weight: the new child's directBlendParameter
+//                            when the clicked tree is Direct; added as a parameter, it defaults to 1 as MACS's does.
 //   Insert                   One undo group (CollapseUndoOperations): adds the parameters (Float), copies the template
 //                            (Copy) and adds the copy as the clicked tree's last child. A single Ctrl+Z removes all of it.
 //   Copy                     Instantiate per blend tree, parameters renamed (names: template name -> chosen name),
