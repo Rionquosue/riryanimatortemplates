@@ -1,0 +1,30 @@
+{
+    "name": "Riry.AnimatorTemplates.Editor",
+    "rootNamespace": "Riry.AnimatorTemplates.Editor",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "RIRY_YGDR",
+        "RIRY_HARMONY"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.ygdr.animator",
+            "expression": "",
+            "define": "RIRY_YGDR"
+        },
+        {
+            "name": "com.vrchat.base",
+            "expression": "",
+            "define": "RIRY_HARMONY"
+        }
+    ],
+    "noEngineReferences": false
+}
