@@ -1,0 +1,31 @@
+{
+    "name": "Riry.AnimatorTemplates.Macs.Editor",
+    "rootNamespace": "Riry.AnimatorTemplates.Editor.Macs",
+    "references": [],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "RIRY_MACS",
+        "RIRY_HARMONY",
+        "RIRY_MACS_WINDOW_DONE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.mcardellje.macs",
+            "expression": "",
+            "define": "RIRY_MACS"
+        },
+        {
+            "name": "com.vrchat.base",
+            "expression": "",
+            "define": "RIRY_HARMONY"
+        }
+    ],
+    "noEngineReferences": false
+}

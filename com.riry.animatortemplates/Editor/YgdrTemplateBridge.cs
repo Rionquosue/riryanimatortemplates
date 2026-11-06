@@ -36,7 +36,7 @@ namespace Riry.AnimatorTemplates.Editor
     /// templates and blend tree templates. The editor only
     /// looks in its own package and in Assets/YGDR Animator/User Templates, so its two loaders
     /// get a Harmony postfix that appends every animator controller (layer templates) and every
-    /// blend tree saved as its own asset (blend tree templates) under Templates/ here. They show
+    /// blend tree saved as its own asset (blend tree templates) under Templates/YGDR here. They show
     /// as package templates: among YGDR's own, never under User/ or Delete User Template.
     /// Compiled only when YGDR Animator Editor and the VRChat SDK base (which brings Harmony)
     /// are installed (see the assembly definition). If an update of the editor renames what is
@@ -45,7 +45,7 @@ namespace Riry.AnimatorTemplates.Editor
     [InitializeOnLoad]
     internal static class YgdrTemplateBridge
     {
-        internal const string TemplatesFolder = "Packages/com.riry.animatortemplates/Templates";
+        internal const string TemplatesFolder = "Packages/com.riry.animatortemplates/Templates/YGDR";
         private const string HarmonyId = "com.riry.animatortemplates.ygdr";
         private const string LogPrefix = "[Riry's Animator Templates] ";
         private const string ToolbarType = "YGDR.Editor.Animation.PatchLayerToolbar";
@@ -90,7 +90,7 @@ namespace Riry.AnimatorTemplates.Editor
         }
 
         /// <summary>
-        /// Layer templates: the editor's list (its cache) gets every controller under Templates/ once. The postfix runs
+        /// Layer templates: the editor's list (its cache) gets every controller under Templates/YGDR once. The postfix runs
         /// inside the editor's menu code, so any error is caught and logged here, leaving the editor's list as it was.
         /// </summary>
         private static void AddLayerTemplates(List<(string, AnimatorController, bool)> __result)
@@ -114,7 +114,7 @@ namespace Riry.AnimatorTemplates.Editor
             }
         }
 
-        /// <summary>Blend tree templates: every blend tree saved as its own asset under Templates/, once (errors as above).</summary>
+        /// <summary>Blend tree templates: every blend tree saved as its own asset under Templates/YGDR, once (errors as above).</summary>
         private static void AddBlendTreeTemplates(List<(string, BlendTree)> __result)
         {
             try
@@ -181,7 +181,7 @@ namespace Riry.AnimatorTemplates.Editor
 
     /// <summary>
     /// YGDR Animator Editor lists every blend tree template under Delete Template, and deleting one deletes the folder it
-    /// is in: for this package's templates, that is this package's own Templates folder. A deletion inside this package
+    /// is in: for this package's templates, that is this package's own Templates/YGDR folder. A deletion inside this package
     /// that comes from the editor's code does nothing but log RefusedMessage as an error; deleting by hand is left alone.
     /// </summary>
     internal sealed class YgdrTemplateDeleteGuard : AssetModificationProcessor
@@ -212,7 +212,7 @@ namespace Riry.AnimatorTemplates.Editor
         }
     }
 
-    /// <summary>When a file under Templates/ is added, changed, moved or removed, the editor's template lists are built again.</summary>
+    /// <summary>When a file under Templates/YGDR is added, changed, moved or removed, the editor's template lists are built again.</summary>
     internal sealed class YgdrTemplateCacheClearer : AssetPostprocessor
     {
         private static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
@@ -235,7 +235,7 @@ namespace Riry.AnimatorTemplates.Editor
 // ============================================================================
 //
 // YgdrTemplateBridge (this file)
-//   TemplatesFolder          Packages/com.riry.animatortemplates/Templates: animator controllers there are layer
+//   TemplatesFolder          Packages/com.riry.animatortemplates/Templates/YGDR: animator controllers there are layer
 //                            templates, blend trees saved as their own asset are blend tree templates. A name with "."
 //                            shows as a submenu (Riry.Toggle.Simple: Riry > Toggle > Simple).
 //   static constructor       [InitializeOnLoad]: Harmony (HarmonyId) postfixes on YGDR's PatchLayerToolbar
