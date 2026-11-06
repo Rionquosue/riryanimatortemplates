@@ -4,9 +4,9 @@ Animator templates for [YGDR Animator Editor](https://github.com/YerGodDamnRight
 
 ## Adding templates
 
-Put templates in `Templates/`, with their `.meta` files.
+Put templates in the folder for the tool that uses them, with their `.meta` files.
 
-### YGDR Animator Editor: `Templates/YGDR/`
+### YGDR Animator Editor: `YGDR/`
 
 - **Layer templates**: animator controllers. They appear in the Animator window's
   layer **+** menu among YGDR's own templates.
@@ -28,7 +28,7 @@ Template**, which deletes the template's whole folder. For this package's
 templates the bridge refuses that and logs an error, so the package's files stay
 intact; remove the package to remove its templates.
 
-### MACS: `Templates/MACS/`
+### MACS: `MACS/`
 
 Blend trees saved as their own asset. Right-clicking a blend tree node in the
 Animator window shows them in a **Riry** submenu beneath MACS's **New**; a

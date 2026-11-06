@@ -12,14 +12,14 @@ namespace Riry.AnimatorTemplates.Editor.Macs
 {
     /// <summary>
     /// Adds a Riry submenu to the right-click menu of a blend tree node in the Animator window, directly beneath MACS's New
-    /// submenu. It lists every blend tree saved as its own asset under Templates/MACS; choosing one opens the window that
+    /// submenu. It lists every blend tree saved as its own asset under MACS/; choosing one opens the window that
     /// inserts it into the clicked blend tree. Unity's HandleNodeInput gets a transpiler (its own Harmony ID, so MACS's
     /// UnpatchAll of its ID leaves it alone) that calls InjectMenu just before the menu is shown.
     /// </summary>
     [InitializeOnLoad]
     internal static class MacsTemplateMenu
     {
-        internal const string TemplatesFolder = "Packages/com.riry.animatortemplates/Templates/MACS";
+        internal const string TemplatesFolder = "Packages/com.riry.animatortemplates/MACS";
         internal const string HarmonyId = "com.riry.animatortemplates.macs";
         internal const string LogPrefix = "[Riry's Animator Templates] ";
         private const string MenuRoot = "Riry/";
@@ -50,7 +50,7 @@ namespace Riry.AnimatorTemplates.Editor.Macs
                 var host = Traverse.Create(graphGUI).Field("m_Host").GetValue<EditorWindow>();
                 var controller = host != null ? Traverse.Create(host).Property("animatorController").GetValue<AnimatorController>() : null;
                 List<BlendTree> templates = FindTemplates();
-                if (templates.Count == 0) menu.AddDisabledItem(new GUIContent(MenuRoot + "No templates in Templates/MACS"));
+                if (templates.Count == 0) menu.AddDisabledItem(new GUIContent(MenuRoot + "No templates in com.riry.animatortemplates/MACS"));
                 foreach (BlendTree template in templates)
                 {
                     var content = new GUIContent(MenuRoot + MenuName(template));
@@ -230,7 +230,7 @@ namespace Riry.AnimatorTemplates.Editor.Macs
 // ============================================================================
 //
 // MacsTemplateMenu (this file)
-//   TemplatesFolder          Packages/com.riry.animatortemplates/Templates/MACS: every blend tree saved as its own asset
+//   TemplatesFolder          Packages/com.riry.animatortemplates/MACS: every blend tree saved as its own asset
 //                            there (subfolders included) is a template in the Riry submenu.
 //   HarmonyId                com.riry.animatortemplates.macs: this patch's owner. Only this ID is ever unpatched, so MACS's
 //                            patches (com.mcardellje.unitymodding) and the YGDR bridge's are left alone.
