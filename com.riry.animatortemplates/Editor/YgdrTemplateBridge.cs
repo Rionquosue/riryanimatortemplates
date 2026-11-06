@@ -89,29 +89,71 @@ namespace Riry.AnimatorTemplates.Editor
             }
         }
 
-        /// <summary>Layer templates: the editor's list (its cache) gets every controller under Templates/ once.</summary>
+        /// <summary>
+        /// Layer templates: the editor's list (its cache) gets every controller under Templates/ once. The postfix runs
+        /// inside the editor's menu code, so any error is caught and logged here, leaving the editor's list as it was.
+        /// </summary>
         private static void AddLayerTemplates(List<(string, AnimatorController, bool)> __result)
         {
-            if (__result == null || !AssetDatabase.IsValidFolder(TemplatesFolder)) return;
-            foreach (string guid in AssetDatabase.FindAssets("t:AnimatorController", new[] { TemplatesFolder }))
+            try
             {
-                var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(AssetDatabase.GUIDToAssetPath(guid));
-                if (controller != null && !__result.Exists(entry => entry.Item2 == controller))
-                    __result.Add((controller.name, controller, false));
+                if (__result == null || !AssetDatabase.IsValidFolder(TemplatesFolder)) return;
+                var added = new List<(string, AnimatorController, bool)>();
+                foreach (string guid in AssetDatabase.FindAssets("t:AnimatorController", new[] { TemplatesFolder }))
+                {
+                    var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(AssetDatabase.GUIDToAssetPath(guid));
+                    if (controller == null || __result.Exists(entry => entry.Item2 == controller)) continue;
+                    if (__result.Exists(entry => entry.Item1 == controller.name)) NameClash("layer", controller.name, controller);
+                    added.Add((controller.name, controller, false));
+                }
+                __result.AddRange(added);
+            }
+            catch (Exception exception)
+            {
+                Failed("Adding the layer templates", exception);
             }
         }
 
-        /// <summary>Blend tree templates: every blend tree saved as its own asset under Templates/, once.</summary>
+        /// <summary>Blend tree templates: every blend tree saved as its own asset under Templates/, once (errors as above).</summary>
         private static void AddBlendTreeTemplates(List<(string, BlendTree)> __result)
         {
-            if (__result == null || !AssetDatabase.IsValidFolder(TemplatesFolder)) return;
-            foreach (string guid in AssetDatabase.FindAssets("t:BlendTree", new[] { TemplatesFolder }))
+            try
             {
-                var blendTree = AssetDatabase.LoadAssetAtPath<BlendTree>(AssetDatabase.GUIDToAssetPath(guid));
-                // As the editor does: blend trees inside controllers are not templates of their own.
-                if (blendTree != null && AssetDatabase.IsMainAsset(blendTree) && !__result.Exists(entry => entry.Item2 == blendTree))
-                    __result.Add((blendTree.name, blendTree));
+                if (__result == null || !AssetDatabase.IsValidFolder(TemplatesFolder)) return;
+                var added = new List<(string, BlendTree)>();
+                foreach (string guid in AssetDatabase.FindAssets("t:BlendTree", new[] { TemplatesFolder }))
+                {
+                    var blendTree = AssetDatabase.LoadAssetAtPath<BlendTree>(AssetDatabase.GUIDToAssetPath(guid));
+                    // As the editor does: blend trees inside controllers are not templates of their own.
+                    if (blendTree == null || !AssetDatabase.IsMainAsset(blendTree) || __result.Exists(entry => entry.Item2 == blendTree)) continue;
+                    if (__result.Exists(entry => entry.Item1 == blendTree.name)) NameClash("blend tree", blendTree.name, blendTree);
+                    added.Add((blendTree.name, blendTree));
+                }
+                __result.AddRange(added);
             }
+            catch (Exception exception)
+            {
+                Failed("Adding the blend tree templates", exception);
+            }
+        }
+
+        // A template named like one already in the editor's list shows twice in its menu: said once per session and name.
+        private static void NameClash(string kind, string name, UnityEngine.Object template)
+        {
+            string key = HarmonyId + ".clash." + kind + "." + name;
+            if (SessionState.GetBool(key, false)) return;
+            SessionState.SetBool(key, true);
+            Debug.LogWarning(LogPrefix + "The " + kind + " template " + name + " has the same name as one YGDR Animator Editor already " +
+                "lists, so the menu shows both. Rename this package's template.", template);
+        }
+
+        // An error inside a postfix: logged once per session and message, with its stack; the editor's list is left alone.
+        private static void Failed(string what, Exception exception)
+        {
+            string key = HarmonyId + ".failed." + what + "." + exception.Message;
+            if (SessionState.GetBool(key, false)) return;
+            SessionState.SetBool(key, true);
+            Debug.LogError(LogPrefix + what + " to YGDR Animator Editor's menu failed, so they are left out: " + exception);
         }
 
         /// <summary>Makes the editor build its template lists again on next use (its own clearing only watches its folders).</summary>
@@ -122,38 +164,37 @@ namespace Riry.AnimatorTemplates.Editor
             {
                 FieldInfo field = AccessTools.Field(Toolbar, name);
                 if (field != null) field.SetValue(null, null);
+                // Without it, template changes only show after a script reload.
+                else Unavailable(ToolbarType + "." + name + " was not found", ", so new or renamed templates only show after a script reload.");
             }
         }
 
-        // Once per editor session: the templates still install, they just aren't in the editor's menus.
-        private static void Unavailable(string why)
+        // Once per editor session; by default the templates still install, they just aren't in the editor's menus.
+        private static void Unavailable(string why, string effect = ", so this package's templates are not in YGDR Animator Editor's template menus.")
         {
             string key = HarmonyId + ".unavailable." + why;
             if (SessionState.GetBool(key, false)) return;
             SessionState.SetBool(key, true);
-            Debug.LogWarning(LogPrefix + why + ", so this package's templates are not in YGDR Animator Editor's template menus. " +
-                "The editor may have changed; update this package.");
+            Debug.LogWarning(LogPrefix + why + effect + " The editor may have changed; update this package.");
         }
     }
 
     /// <summary>
     /// YGDR Animator Editor lists every blend tree template under Delete Template, and deleting one deletes the folder it
     /// is in: for this package's templates, that is this package's own Templates folder. A deletion inside this package
-    /// that comes from the editor's code is refused, with a message; deleting by hand is left alone.
+    /// that comes from the editor's code does nothing but log RefusedMessage as an error; deleting by hand is left alone.
     /// </summary>
     internal sealed class YgdrTemplateDeleteGuard : AssetModificationProcessor
     {
         private const string PackageRoot = "Packages/com.riry.animatortemplates";
+        internal const string RefusedMessage = "please remove the templates vpm to delete templates";
 
         private static AssetDeleteResult OnWillDeleteAsset(string path, RemoveAssetOptions options)
         {
             string normalized = path.Replace('\\', '/').TrimEnd('/');
             if (normalized != PackageRoot && !normalized.StartsWith(PackageRoot + "/", StringComparison.Ordinal)) return AssetDeleteResult.DidNotDelete;
             if (!FromYgdr()) return AssetDeleteResult.DidNotDelete;
-            Debug.LogWarning("[Riry's Animator Templates] Refused YGDR Animator Editor's deletion of " + normalized +
-                ": the templates of this package are part of it and can't be deleted from the editor's menu.");
-            EditorUtility.DisplayDialog("Riry's Animator Templates", "This template comes with Riry's Animator Templates, so it " +
-                "can't be deleted from YGDR Animator Editor's menu. Nothing was deleted.", "OK");
+            Debug.LogError(RefusedMessage);
             return AssetDeleteResult.FailedDelete;
         }
 
@@ -203,9 +244,12 @@ namespace Riry.AnimatorTemplates.Editor
 //                            (name, controller, isUser false), so it is a package template, not a deletable user one.
 //   AddBlendTreeTemplates    Postfix: adds each main-asset blend tree once to its blend tree list.
 //   ClearCaches()            Sets the editor's _templateCache and _blendTreeTemplateCache to null.
-//   Unavailable(why)         The patched type or method was not found or refused the postfix: warned once per session.
+//   Unavailable(why, effect) The patched type, method or a cache field was not found, or a method refused the postfix:
+//                            warned once per session (LogPrefix).
+//   NameClash / Failed       A template named like one YGDR lists (warned once per name); an error inside a postfix
+//                            (logged once with its stack; the editor's list left unchanged, so its menu still builds).
 // YgdrTemplateCacheClearer   AssetPostprocessor: a change under TemplatesFolder clears the caches.
-// YgdrTemplateDeleteGuard    AssetModificationProcessor: refuses (FailedDelete, with a dialog and a warning) a deletion
+// YgdrTemplateDeleteGuard    AssetModificationProcessor: refuses (FailedDelete; only RefusedMessage logged as an error) a deletion
 //                            inside this package made by YGDR's code (FromYgdr: a YGDR.* type on the call stack), as its
 //                            blend tree Delete Template deletes the template's whole folder. Deleting by hand still works.
 // Template kinds             YGDR Animator Editor 1.2.1 has two: layer templates (LoadTemplateControllers) and blend

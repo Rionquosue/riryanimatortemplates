@@ -23,7 +23,8 @@ warning says so once per session.
 
 YGDR Animator Editor also lists every blend tree template under **Delete
 Template**, which deletes the template's whole folder. For this package's
-templates the bridge refuses that, so the package's files stay intact.
+templates the bridge refuses that and logs an error, so the package's files stay
+intact; remove the package to remove its templates.
 
 ## Licences
 
