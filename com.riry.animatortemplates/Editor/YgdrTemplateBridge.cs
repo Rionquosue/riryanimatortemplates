@@ -32,7 +32,8 @@ using UnityEngine;
 namespace Riry.AnimatorTemplates.Editor
 {
     /// <summary>
-    /// Adds this package's templates to YGDR Animator Editor's template menus. The editor only
+    /// Adds this package's templates to YGDR Animator Editor's template menus: both kinds it has (1.2.1), layer
+    /// templates and blend tree templates. The editor only
     /// looks in its own package and in Assets/YGDR Animator/User Templates, so its two loaders
     /// get a Harmony postfix that appends every animator controller (layer templates) and every
     /// blend tree saved as its own asset (blend tree templates) under Templates/ here. They show
@@ -135,6 +136,41 @@ namespace Riry.AnimatorTemplates.Editor
         }
     }
 
+    /// <summary>
+    /// YGDR Animator Editor lists every blend tree template under Delete Template, and deleting one deletes the folder it
+    /// is in: for this package's templates, that is this package's own Templates folder. A deletion inside this package
+    /// that comes from the editor's code is refused, with a message; deleting by hand is left alone.
+    /// </summary>
+    internal sealed class YgdrTemplateDeleteGuard : AssetModificationProcessor
+    {
+        private const string PackageRoot = "Packages/com.riry.animatortemplates";
+
+        private static AssetDeleteResult OnWillDeleteAsset(string path, RemoveAssetOptions options)
+        {
+            string normalized = path.Replace('\\', '/').TrimEnd('/');
+            if (normalized != PackageRoot && !normalized.StartsWith(PackageRoot + "/", StringComparison.Ordinal)) return AssetDeleteResult.DidNotDelete;
+            if (!FromYgdr()) return AssetDeleteResult.DidNotDelete;
+            Debug.LogWarning("[Riry's Animator Templates] Refused YGDR Animator Editor's deletion of " + normalized +
+                ": the templates of this package are part of it and can't be deleted from the editor's menu.");
+            EditorUtility.DisplayDialog("Riry's Animator Templates", "This template comes with Riry's Animator Templates, so it " +
+                "can't be deleted from YGDR Animator Editor's menu. Nothing was deleted.", "OK");
+            return AssetDeleteResult.FailedDelete;
+        }
+
+        // Whether YGDR Animator Editor's code (namespace YGDR...) is on the call stack.
+        private static bool FromYgdr()
+        {
+            System.Diagnostics.StackFrame[] frames = new System.Diagnostics.StackTrace(false).GetFrames();
+            if (frames == null) return false;
+            foreach (System.Diagnostics.StackFrame frame in frames)
+            {
+                Type type = frame.GetMethod() != null ? frame.GetMethod().DeclaringType : null;
+                if (type != null && type.Namespace != null && type.Namespace.StartsWith("YGDR", StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+    }
+
     /// <summary>When a file under Templates/ is added, changed, moved or removed, the editor's template lists are built again.</summary>
     internal sealed class YgdrTemplateCacheClearer : AssetPostprocessor
     {
@@ -169,6 +205,11 @@ namespace Riry.AnimatorTemplates.Editor
 //   ClearCaches()            Sets the editor's _templateCache and _blendTreeTemplateCache to null.
 //   Unavailable(why)         The patched type or method was not found or refused the postfix: warned once per session.
 // YgdrTemplateCacheClearer   AssetPostprocessor: a change under TemplatesFolder clears the caches.
+// YgdrTemplateDeleteGuard    AssetModificationProcessor: refuses (FailedDelete, with a dialog and a warning) a deletion
+//                            inside this package made by YGDR's code (FromYgdr: a YGDR.* type on the call stack), as its
+//                            blend tree Delete Template deletes the template's whole folder. Deleting by hand still works.
+// Template kinds             YGDR Animator Editor 1.2.1 has two: layer templates (LoadTemplateControllers) and blend
+//                            tree templates (LoadBlendTreeTemplateAssets); both are covered.
 // Riry.AnimatorTemplates.Editor.asmdef  Editor only; compiled only with com.ygdr.animator (RIRY_YGDR) and
 //                            com.vrchat.base (RIRY_HARMONY, its 0Harmony.dll) installed.
 // YGDR source: https://github.com/YerGodDamnRight/YGDR-Animator-Editor (also in the YGDR_ANIMATOR_EDITOR_REPO

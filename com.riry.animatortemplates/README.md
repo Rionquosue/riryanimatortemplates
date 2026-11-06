@@ -21,6 +21,10 @@ folder to its template lists. It needs YGDR Animator Editor and the VRChat SDK
 not in those menus. If an update of the editor stops the bridge working, a
 warning says so once per session.
 
+YGDR Animator Editor also lists every blend tree template under **Delete
+Template**, which deletes the template's whole folder. For this package's
+templates the bridge refuses that, so the package's files stay intact.
+
 ## Licences
 
 - `Editor/YgdrTemplateBridge.cs`: GNU General Public License v3.0 or later
